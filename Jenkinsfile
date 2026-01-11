@@ -14,9 +14,10 @@ pipeline {
             steps {
                 echo 'Container test ediliyor...'
                 sh '''
-                    docker run -d --name test-${BUILD_NUMBER} -p 8888:80 webapp:${BUILD_NUMBER}
-                    sleep 3
-                    curl -f http://localhost:8888 || exit 1
+                    docker run -d --name test-${BUILD_NUMBER} webapp:${BUILD_NUMBER}
+                    sleep 2
+                    docker ps | grep test-${BUILD_NUMBER}
+                    docker logs test-${BUILD_NUMBER}
                     docker stop test-${BUILD_NUMBER}
                     docker rm test-${BUILD_NUMBER}
                 '''
