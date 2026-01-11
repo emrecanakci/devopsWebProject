@@ -28,8 +28,13 @@ pipeline {
             steps {
                 echo 'Uygulama deploy ediliyor...'
                 sh '''
-                    docker stop webapp-prod || true
-                    docker rm webapp-prod || true
+                    # Eski container'ları temizle
+                    docker ps -a | grep webapp-prod | awk '{print $1}' | xargs -r docker rm -f || true
+                    
+                    # Port 9090'ı kullanan container'ı bul ve durdur
+                    docker ps | grep ':9090->' | awk '{print $1}' | xargs -r docker stop || true
+                    
+                    # Yeni container'ı başlat
                     docker run -d --name webapp-prod -p 9090:80 webapp:latest
                 '''
             }
