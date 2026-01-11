@@ -17,6 +17,7 @@ spec:
       containers:
         - name: webapp
           image: myrepo/webapp:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 80
           resources:
