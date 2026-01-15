@@ -336,46 +336,56 @@ eval $(minikube docker-env -u)
 
 ## 🔄 CI/CD Pipeline (Jenkinsfile)
 
+### Gerçek Pipeline Yapısı
+
 ```groovy
 pipeline {
     agent any
-    
-    environment {
-        DOCKER_IMAGE = 'myrepo/webapp'
-        DOCKER_TAG = "${BUILD_NUMBER}"
-    }
     
     stages {
         stage('Build') {
             steps {
                 echo 'Docker imaji olusturuluyor...'
-                sh 'docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .'
-                sh 'docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest'
+                sh 'docker build -t webapp:${BUILD_NUMBER} .'
+                sh 'docker tag webapp:${BUILD_NUMBER} webapp:latest'
             }
         }
         
-        stage('Push') {
+        stage('Test') {
             steps {
-                echo 'Docker imaji push ediliyor...'
-                sh 'docker push ${DOCKER_IMAGE}:${DOCKER_TAG}'
-                sh 'docker push ${DOCKER_IMAGE}:latest'
+                echo 'Container test ediliyor...'
+                sh '''
+                    docker run -d --name test-${BUILD_NUMBER} webapp:${BUILD_NUMBER}
+                    sleep 2
+                    docker ps | grep test-${BUILD_NUMBER}
+                    docker logs test-${BUILD_NUMBER}
+                    docker stop test-${BUILD_NUMBER}
+                    docker rm test-${BUILD_NUMBER}
+                '''
             }
         }
         
         stage('Deploy') {
             steps {
-                echo 'Kubernetes deploy ediliyor...'
-                sh 'kubectl apply -f k8s/'
+                echo 'Uygulama deploy ediliyor...'
+                sh '''
+                    # Eski container'ları temizle
+                    docker ps -a | grep webapp-prod | awk '{print $1}' | xargs -r docker rm -f || true
+                    
+                    # Yeni container'ı başlat
+                    docker run -d --name webapp-prod -p 8090:80 webapp:latest
+                '''
             }
         }
     }
     
     post {
         success {
-            echo 'Pipeline basariyla tamamlandi!'
+            echo '✅ Pipeline basariyla tamamlandi!'
+            echo '🚀 Uygulama http://localhost:8090 adresinde calisıyor'
         }
         failure {
-            echo 'Pipeline basarisiz oldu!'
+            echo '❌ Pipeline basarisiz oldu!'
         }
     }
 }
@@ -383,11 +393,35 @@ pipeline {
 
 ### Pipeline Aşamaları:
 
-| Aşama | İşlem | Komut |
-|-------|-------|-------|
-| **Build** | Docker imajı oluştur | `docker build -t myrepo/webapp:1 .` |
-| **Push** | İmajı registry'e gönder | `docker push myrepo/webapp:1` |
-| **Deploy** | Kubernetes'e deploy et | `kubectl apply -f k8s/` |
+| Aşama | İşlem | Açıklama |
+|-------|-------|----------|
+| **Build** | Docker imajı oluştur | Her build'de yeni tag (webapp:1, webapp:2...) |
+| **Test** | Container'ı test et | Container başlatılıp loglar kontrol edilir |
+| **Deploy** | Lokal deploy | Port 8090'da production container çalıştırılır |
+
+### CI/CD Workflow:
+
+```
+1. Kod değişikliği (git push)
+   ↓
+2. Jenkins otomatik tetiklenir
+   ↓
+3. Build: Docker imajı oluşturulur
+   ↓
+4. Test: Container başlatılıp test edilir
+   ↓
+5. Deploy: Port 8090'da yayına alınır
+   ↓
+6. ✅ Uygulama erişilebilir: http://localhost:8090
+```
+
+### Erişim Noktaları:
+
+| Servis | URL | Açıklama |
+|--------|-----|----------|
+| **Jenkins** | http://localhost:8080 | CI/CD yönetim paneli |
+| **Webapp (Docker)** | http://localhost:8090 | Jenkins tarafından deploy edilen uygulama |
+| **Webapp (Kubernetes)** | http://192.168.49.2:30090 | Minikube'de çalışan uygulama |
 
 ---
 
